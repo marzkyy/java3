@@ -2,7 +2,7 @@ public class CoffeeMaker {
     public static void main(String[] args) {
         try {
             makeCoffee(); // Try to make coffee
-        } catch (MachineException e) {
+        } catch (Exception e) {
             // Handle the error if the coffee machine breaks
             System.out.println("Machine broke! Making instant coffee instead.");
         } finally {
@@ -11,9 +11,9 @@ public class CoffeeMaker {
         }
     }
 
-    public static void makeCoffee() throws MachineException {
+    public static void makeCoffee() throws Exception {
         // Simulating a problem with the coffee machine
-        throw new MachineException("Coffee machine malfunction!");
+        throw new Exception("Coffee machine malfunction!");
     }
 }
 
