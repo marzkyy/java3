@@ -42,4 +42,19 @@ class GenericCatalog<T extends LibraryItem> {
             catalog.values().forEach(System.out::println);
         }
     }
+
+    // Search for items by title or author
+    public void searchItems(String keyword) {
+        boolean found = false;
+        for (T item : catalog.values()) {
+            if (item.getTitle().toLowerCase().contains(keyword.toLowerCase()) || 
+                item.getAuthor().toLowerCase().contains(keyword.toLowerCase())) {
+                System.out.println(item);
+                found = true;
+            }
+        }
+        if (!found) {
+            System.out.println("No items found matching the keyword: " + keyword);
+        }
+    }
 }
