@@ -1,54 +1,94 @@
-// ChatClient.java
 import java.io.*;
 import java.net.*;
-import java.util.*;
+import java.util.function.Consumer;
 
-// The ChatClient class handles the client-side functionality of the chat application.
-// It connects to the server, sends messages, and displays messages from other clients.
 public class ChatClient {
-    private static final String SERVER_ADDRESS = "localhost"; // Server address (change if server is remote).
-    private static final int SERVER_PORT = 12345; // Port number to connect to the server.
+    private final String serverAddress;
+    private final int serverPort;
+    private Socket socket;
+    private PrintWriter out;
+    private BufferedReader in;
+    private Consumer<String> messageHandler;
+    private boolean hasSentName = false; // Track if the name has already been sent
 
-    public static void main(String[] args) {
-        try (
-            Socket socket = new Socket(SERVER_ADDRESS, SERVER_PORT); // Establish connection to the server.
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true); // Output stream to send messages.
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream())); // Input stream to receive messages.
-            Scanner scanner = new Scanner(System.in); // Scanner for user input.
-        ) {
-            System.out.println("Connected to the chat server.");
+    public ChatClient(String serverAddress, int serverPort) {
+        this.serverAddress = serverAddress;
+        this.serverPort = serverPort;
+    }
 
-            // Create a thread to listen for and display messages from the server.
-            Thread listenerThread = new Thread(() -> {
-                String serverMessage;
-                try {
-                    while ((serverMessage = in.readLine()) != null) {
-                        System.out.println(serverMessage); // Display server messages.
+    public void connect(Consumer<String> messageHandler) throws IOException {
+        this.messageHandler = messageHandler;
+        socket = new Socket(serverAddress, serverPort);
+        out = new PrintWriter(socket.getOutputStream(), true);
+        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+
+        // Start a thread to listen for messages from the server
+        new Thread(() -> {
+            try {
+                String message;
+                while ((message = in.readLine()) != null) {
+                    // Ignore the "Enter your name" message if the name has already been sent
+                    if (hasSentName || !message.contains("Enter your name")) {
+                        messageHandler.accept(message); // Print server messages
                     }
-                } catch (IOException e) {
-                    System.out.println("Disconnected from the server.");
                 }
-            });
-
-            listenerThread.start();
-
-            // Read user input and send it to the server.
-            String userMessage;
-            while (scanner.hasNextLine()) {
-                userMessage = scanner.nextLine();
-                if (userMessage.trim().isEmpty()) {
-                    System.out.println("Cannot send an empty message.");
-                    continue;
-                }
-                if (userMessage.length() > 200) {
-                    System.out.println("Message too long. Keep it under 200 characters.");
-                    continue;
-                }
-                out.println(userMessage);
+            } catch (IOException e) {
+                messageHandler.accept("Disconnected from the server.");
             }
-        } catch (IOException e) {
-            // Handle errors related to the client socket.
-            System.out.println("Unable to connect to the server: " + e.getMessage());
+        }).start();
+    }
+
+    public void sendRegularMessage(String message) {
+        if (out != null) {
+            out.println(message);
+        }
+    }
+
+    public void sendNameChange(String newName) {
+        if (!newName.isEmpty()) {
+            sendRegularMessage("/name " + newName); // Send name change request
+        } else {
+            System.out.println("Please provide a valid name.");
+        }
+    }
+
+    public boolean isValidMessage(String message) {
+        if (message.trim().isEmpty()) {
+            System.out.println("Cannot send an empty message.");
+            return false;
+        } else if (message.length() > 200) {
+            System.out.println("Message too long. Keep it under 200 characters.");
+            return false;
+        }
+        return true;
+    }
+
+    public void disconnect() {
+        if (socket != null && !socket.isClosed()) {
+            try {
+                socket.close(); // Properly close the socket connection
+            } catch (IOException e) {
+                System.out.println("Error closing connection: " + e.getMessage());
+            }
+        }
+    }
+
+    public String setUserName(String userName) {
+        if (userName.isEmpty()) {
+            return "User" + (int) (Math.random() * 1000); // Default name if empty
+        }
+        return userName;
+    }
+
+    public boolean isSocketClosed() {
+        return socket == null || socket.isClosed();
+    }
+
+    // Ensure the username is sent only once
+    public void sendUserNameOnce(String userName) {
+        if (!hasSentName) {
+            sendRegularMessage(userName); // Send name only once
+            hasSentName = true; // Mark that the name has been sent
         }
     }
 }

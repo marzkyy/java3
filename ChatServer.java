@@ -1,35 +1,28 @@
-// ChatServer.java
 import java.io.*;
 import java.net.*;
 import java.util.*;
 
-// The ChatServer class manages the server-side functionality of the chat application.
-// It handles incoming client connections and message broadcasting.
 public class ChatServer {
-    private static final int PORT = 12345; // The port number the server will listen on.
-    private static Map<String, PrintWriter> clients = new HashMap<>(); // Stores connected clients and their output streams.
+    private static final int PORT = 12345; // The port on which the server listens for incoming connections
+    private static Map<String, PrintWriter> clients = new HashMap<>(); // Map to store the connected clients with their usernames and output writers
 
     public static void main(String[] args) {
         System.out.println("Chat server is running...");
-
-        // Start the server and listen for client connections.
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
             while (true) {
-                // Create a new thread for each incoming client connection.
-                new ClientHandler(serverSocket.accept()).start();
+                new ClientHandler(serverSocket.accept()).start(); // Accept client connections and start a new thread for each
             }
         } catch (IOException e) {
-            // Handle errors related to the server socket.
             System.out.println("Server encountered an error: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    // The ClientHandler class handles communication with a single client.
     private static class ClientHandler extends Thread {
-        private Socket socket; // The socket for client communication.
-        private String clientId; // A unique ID assigned to the client.
-        private PrintWriter out; // The output stream to send messages to the client.
+        private Socket socket; 
+        private String userName;       
+        private PrintWriter out;       
+        private BufferedReader in;     
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
@@ -37,56 +30,86 @@ public class ChatServer {
 
         @Override
         public void run() {
-            try (
-                InputStreamReader isr = new InputStreamReader(socket.getInputStream());
-                BufferedReader in = new BufferedReader(isr);
-            ) {
+            try {
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                 out = new PrintWriter(socket.getOutputStream(), true);
 
-                // Assign a unique user ID and add the client to the list.
-                synchronized (clients) {
-                    clientId = "User" + (clients.size() + 1);
-                    clients.put(clientId, out);
+                // Ask for the client's username only if it has not been sent already
+                out.println("Enter your name (or press Enter to use default 'User'):");
+                userName = in.readLine().trim();
+
+                // If the name is empty, assign a default name (you can modify this if needed)
+                if (userName.isEmpty()) {
+                    userName = "User" + (int) (Math.random() * 1000); 
                 }
 
-                // Notify all clients that a new user has joined.
-                broadcast(clientId + " has joined the chat.");
+                // Ensure the username is unique
+                while (clients.containsKey(userName)) {
+                    out.println("The name '" + userName + "' is already taken. Please choose another name:");
+                    userName = in.readLine().trim();
+                }
 
-                // Read and broadcast messages from the client.
+                // Add the client to the list of connected clients
+                synchronized (clients) {
+                    clients.put(userName, out);
+                }
+
+                // Notify all clients that the new user has joined
+                broadcast(userName + " has joined the chat.");
+
+                // Handle incoming messages from the client
                 String message;
                 while ((message = in.readLine()) != null) {
                     if (message.trim().isEmpty()) {
                         out.println("Empty messages are not allowed.");
                         continue;
                     }
-                    if (message.length() > 200) {
+
+                    // Handle name change command
+                    if (message.startsWith("/name ")) {
+                        String newName = message.substring(6).trim();
+                        if (!newName.isEmpty() && !clients.containsKey(newName)) {
+                            String oldName = userName;
+                            userName = newName;
+                            // Update the username in the clients map
+                            synchronized (clients) {
+                                clients.put(userName, clients.remove(oldName));
+                            }
+                            out.println("Your name has been changed to " + userName);
+                            broadcast(oldName + " has changed their name to " + userName);
+                        } else {
+                            out.println("Please provide a valid name or the name is already taken.");
+                        }
+                    } else if (message.equals("/disconnect") || message.equals("/exit")) {
+                        out.println("You have disconnected.");
+                        break;
+                    } else if (message.length() > 200) {
                         out.println("Message is too long. Keep it under 200 characters.");
-                        continue;
+                    } else {
+                        broadcast(userName + ": " + message);
                     }
-                    broadcast(clientId + ": " + message);
                 }
             } catch (IOException e) {
-                System.out.println(clientId + " disconnected.");
+                System.out.println(userName + " disconnected.");
             } finally {
-                // Remove the client from the list and notify others.
+                // Remove the client from the list when they disconnect
                 synchronized (clients) {
-                    clients.remove(clientId);
+                    clients.remove(userName);
                 }
-                broadcast(clientId + " has left the chat.");
+                broadcast(userName + " has left the chat.");
                 try {
                     socket.close();
                 } catch (IOException e) {
-                    System.out.println("Error closing socket for " + clientId + ": " + e.getMessage());
+                    System.out.println("Error closing socket for " + userName + ": " + e.getMessage());
                 }
             }
         }
 
-        // Broadcast a message to all connected clients.
         private void broadcast(String message) {
-            System.out.println(message); // Log the message on the server console.
+            System.out.println(message); 
             synchronized (clients) {
                 for (PrintWriter writer : clients.values()) {
-                    writer.println(message);
+                    writer.println(message); 
                 }
             }
         }
